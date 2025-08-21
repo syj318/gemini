@@ -11,8 +11,9 @@ class Config:
     SUPPORTED_EXTENSIONS = ["pdf", "csv", "txt"]
     MAX_FILE_SIZE_MB = 10
     
-    DATABASE_URL = "mysql+mysqlconnector://user:wawa5930@localhost:3306/chat_history"
-
+    # SQLite를 사용하도록 설정 (가장 간편한 방식)
+    DATABASE_URL = "sqlite:///chat_history.db"
+    # DATABASE_URL = os.getenv("DATABASE_URL", "mysql+mysqlconnector://user:password@localhost:3306/chat_history")
     
     TIMEZONE = os.getenv("TIMEZONE", "Asia/Seoul")
     FAQ_LIMIT = int(os.getenv("FAQ_LIMIT", "5"))
