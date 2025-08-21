@@ -103,43 +103,6 @@ class DB:
         with DB._Session() as s:
             return s.query(Message).order_by(Message.created_at.desc()).limit(limit).all()
 
-    @staticmethod
-    def archive_old_messages(months_ago: int = 6) -> str:
-        now = DB.now_local_naive()
-        cutoff_date = now - relativedelta(months=months_ago)
-        
-        print(f"[{now.strftime('%Y-%m-%d %H:%M:%S')}] 아카이빙 작업을 시작합니다...")
-        print(f"대상: {cutoff_date.strftime('%Y-%m-%d %H:%M:%S')} 이전의 모든 대화 기록")
-
-        with DB._Session() as s:
-            old_messages_query = s.query(Message).filter(Message.created_at < cutoff_date)
-            
-            try:
-                df = pd.read_sql(old_messages_query.statement, s.bind)
-            except Exception as e:
-                return f"오류: 데이터를 읽는 중 문제가 발생했습니다: {e}"
-
-            if df.empty:
-                return "완료: 아카이빙할 오래된 데이터가 없습니다."
-
-            num_records = len(df)
-            archive_filename = f"archive_{now.strftime('%Y%m%d_%H%M%S')}.csv"
-
-            try:
-                df.to_csv(archive_filename, index=False, encoding='utf-8-sig')
-                print(f"성공: {num_records}개의 기록을 '{archive_filename}' 파일로 백업했습니다.")
-
-                old_messages_query.delete(synchronize_session=False)
-                s.commit()
-                print(f"성공: 데이터베이스에서 오래된 기록 {num_records}개를 삭제했습니다.")
-                
-                return f"완료: 총 {num_records}개의 기록을 성공적으로 아카이빙했습니다. (백업 파일: {archive_filename})"
-
-            except Exception as e:
-                s.rollback()
-                return f"치명적 오류: 아카이빙 작업 중 문제가 발생하여 모든 변경사항을 되돌렸습니다. 오류: {e}"
-
-
 # ======================= 파일 처리 =======================
 class FileProcessor:
     _ENCODINGS = ["utf-8", "cp949", "euc-kr", "latin-1"]
