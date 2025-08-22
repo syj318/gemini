@@ -99,6 +99,37 @@ class DB:
         return results
 
     @staticmethod
+    def get_user_popular_questions(limit: int = 5) -> List[Tuple[str, str, int]]:
+        """사용자들이 실제로 많이 질문한 내용을 반환"""
+        with DB._Session() as s:
+            # 사용자 질문을 정규화하여 그룹화
+            results = (
+                s.query(
+                    Message.user_text,
+                    func.count(Message.user_text).label('count')
+                )
+                .group_by(Message.user_text)
+                .order_by(func.count(Message.user_text).desc())
+                .limit(limit)
+                .all()
+            )
+            
+            # 각 질문에 대한 답변도 함께 가져오기
+            popular_questions = []
+            for question, count in results:
+                # 해당 질문의 가장 최근 답변 가져오기
+                answer = (
+                    s.query(Message.bot_text)
+                    .filter(Message.user_text == question)
+                    .order_by(Message.created_at.desc())
+                    .first()
+                )
+                if answer:
+                    popular_questions.append((question, answer[0], count))
+            
+            return popular_questions
+
+    @staticmethod
     def get_recent_messages(limit: int = 10) -> List[Message]:
         with DB._Session() as s:
             return s.query(Message).order_by(Message.created_at.desc()).limit(limit).all()
