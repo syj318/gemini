@@ -106,7 +106,6 @@ class BexcoChatbot:
 
     # ================= 데이터셋/FAQ 처리 =================
     async def _dataset_lookup(self, query: str):
-        """FAQ → INTENT_MAP → 데이터셋 검색 순서"""
 
         # 1) FAQ 유사도 매칭
         faq_questions = [faq["question"] for faq in BEXCO_FAQ]
@@ -126,9 +125,16 @@ class BexcoChatbot:
         # 3) 데이터셋 일반 검색
         return [naturalize_text(r) for r in search_bexco_info(query)]
 
-    async def _model_lookup(self, query: str):
-        """Gemini 모델 호출"""
-        context = self._create_bexco_context(query)
+    async def _model_lookup(self, query: str, dataset_results: str = None):
+        """Gemini 모델 호출 (데이터셋 결과를 컨텍스트에 포함)"""
+        context = f"사용자 질문: {query}\n\n"
+        if dataset_results:
+            context += f"다음은 벡스코 공식 데이터셋에서 찾은 관련 정보입니다:\n{dataset_results}\n\n"
+            context += "위 정보를 참고해서 간단하고 정확한 답변을 자연스럽게 작성해주세요."
+        else:
+            context += "간단하고 직접적으로 답변해주세요."
+
+        # Gemini 모델 호출
         stream = st.session_state.chat_session.send_message(context, stream=True)
         text = ""
         for chunk in stream:
@@ -137,16 +143,18 @@ class BexcoChatbot:
         return naturalize_text(text)
 
     async def reply_async(self, user_prompt: str) -> str:
+        """RAG 구조: 데이터셋 검색 결과를 모델 컨텍스트에 추가"""
         try:
-            dataset_task = asyncio.create_task(self._dataset_lookup(user_prompt))
-            model_task = asyncio.create_task(self._model_lookup(user_prompt))
+            dataset_result = await self._dataset_lookup(user_prompt)
 
-            dataset_result = await dataset_task
-            if dataset_result:  # ✅ 데이터셋/FAQ/매핑 결과 있으면 즉시 반환
-                model_task.cancel()
-                return "\n".join(dataset_result[:3])
-            else:               # ✅ 없으면 모델 결과 반환
-                return await model_task
+            # ✅ 데이터셋 결과가 있으면 → 제미나이 모델에 넣어서 자연스러운 답변 생성
+            if dataset_result:
+                dataset_text = "\n".join(dataset_result[:3])
+                return await self._model_lookup(user_prompt, dataset_text)
+
+            # ✅ 없으면 → 모델만 사용
+            return await self._model_lookup(user_prompt)
+
         except Exception as e:
             return f"응답 생성 중 오류가 발생했습니다: {e}"
 
